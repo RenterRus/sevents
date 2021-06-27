@@ -3,23 +3,35 @@ package db
 import (
 	"fmt"
 	"gopkg.in/mgo.v2/bson"
-	"strconv"
 	"time"
 )
 
-func (m *Mongo) SearchEvent(typeEvent string) bool{
+func (m *Mongo) SearchEvent(typeEvent string) bool {
 	query := bson.M{
-		"type" : typeEvent,
+		"type": typeEvent,
 	}
 	events := []DocStruct{}
-	m.Collection.Find(query).All(&events)
+	err := m.Collection.Find(query).All(&events)
+	if err != nil {
+		//Если не получилось с первого раза, попробуем еще несколько
+		for i := 0; i < 4; i++ {
+			time.Sleep(time.Second)
+			err = m.Collection.Find(query).All(&events)
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			panic(err.Error())
+		}
+	}
 
-	if len(events) == 0{
+	if len(events) == 0 {
 		return false
 	}
 
-	for _, v := range events{
-		if v.State == 0{
+	for _, v := range events {
+		if v.State == 0 {
 			return true
 		}
 	}
@@ -27,13 +39,26 @@ func (m *Mongo) SearchEvent(typeEvent string) bool{
 	return false
 }
 
-func (m *Mongo) FinishEvent(typeEvent string) bool{
-	if !m.SearchEvent(typeEvent){
+func (m *Mongo) FinishEvent(typeEvent string) bool {
+	if !m.SearchEvent(typeEvent) {
 		return false
 	} else {
-		_, err := m.Collection.UpdateAll(bson.M{"type": typeEvent}, bson.M{"$set": bson.M{"state": 1, "finished_at":strconv.Itoa(int(time.Now().Unix()))}})
-		if err != nil{
-			fmt.Println(err)
+		err := m.Collection.Update(bson.M{"type": typeEvent, "state": 0}, bson.M{"$set": bson.M{"state": 1,
+			"finished_at": time.Now().Format("01-02-2006 15:04:05.000000")}})
+		if err != nil {
+			//Если не получилось с первого раза, попробуем еще несколько
+			for i := 0; i < 4; i++ {
+				time.Sleep(time.Second)
+				err = m.Collection.Update(bson.M{"type": typeEvent, "state": 0}, bson.M{"$set": bson.M{"state": 1,
+					"finished_at": time.Now().Format("01-02-2006 15:04:05.000000")}})
+				if err == nil {
+					break
+				}
+			}
+			if err != nil {
+				fmt.Println(err)
+				panic(err)
+			}
 		}
 	}
 	return true

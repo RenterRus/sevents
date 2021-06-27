@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github.com/spf13/cobra"
-	"log"
 	"os"
 	"os/signal"
 	"storing_events/internal/db"
@@ -12,37 +11,24 @@ import (
 	"syscall"
 )
 
-func RunSevents(cmdSevents *cobra.Command, args []string){
+func RunSevents(cmdSevents *cobra.Command, args []string) {
 	l, _ := cmdSevents.Flags().GetString("listen")
-	serv := v1.NewServer(l)
+	m, _ := cmdSevents.Flags().GetString("mongo")
+	d, _ := cmdSevents.Flags().GetString("db")
+	c, _ := cmdSevents.Flags().GetString("collection")
+
+	serv := v1.NewServer(l, db.GetMongoClient(m, d, c))
 
 	var wg sync.WaitGroup
 	sign := make(chan os.Signal, 1)
 	signal.Notify(sign, syscall.SIGINT, syscall.SIGTERM)
 
-	wg.Add(3)
+	wg.Add(2)
 
-	go func(){
+	go func() {
 		defer wg.Done()
-
-		m, _ := cmdSevents.Flags().GetString("mongo")
-		db.MongoParam.Addr = m
-		d, _ := cmdSevents.Flags().GetString("db")
-		db.MongoParam.DBName = d
-		c, _ := cmdSevents.Flags().GetString("collection")
-		db.MongoParam.CollName = c
-
-		db.MongoParam.GetClient()
-		err := db.MongoParam.Session.Ping()
-		if err != nil {
-			log.Fatal(err)
-		} else {
-			fmt.Printf("The connection to the database is established in: %s for %s -> %s", m, d, c)
-		}
-	}()
-
-	go func(){
-		defer wg.Done()
+		fmt.Printf("The HTTP server is raised with the parameters:\n  Server addr: %s\n  Monga addr:  %s\n  DB name:     %s\n  Coll name:   %s\n",
+			l, m, d, c)
 		if err := serv.Start(); err != nil {
 			fmt.Println(err.Error())
 		}
@@ -55,7 +41,7 @@ func RunSevents(cmdSevents *cobra.Command, args []string){
 		fmt.Println("\nServer stopping")
 		serv.GraceShutdown()
 		fmt.Println("DB stopping")
-		db.MongoParam.Session.Close()
+		serv.Mongo.Session.Close()
 		fmt.Println("Gracefull shutdown complete")
 	}()
 

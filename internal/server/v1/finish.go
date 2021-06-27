@@ -3,12 +3,18 @@ package v1
 import (
 	"fmt"
 	"net/http"
-	"storing_events/internal/db"
 )
 
-func (s *HTTPServer) finish(w http.ResponseWriter, r *http.Request){
+func (s *HTTPServer) finish(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(r.URL.String())
-	if !db.MongoParam.FinishEvent(r.FormValue("type")) {
+
+	answer := make(chan bool, 1)
+
+	go func() {
+		answer <- s.Mongo.FinishEvent(r.FormValue("type"))
+	}()
+
+	if !<-answer {
 		w.WriteHeader(http.StatusNotFound)
 		fmt.Fprint(w, "Not found")
 	} else {
